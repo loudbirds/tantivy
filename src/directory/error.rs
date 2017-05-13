@@ -18,13 +18,7 @@ pub enum OpenWriteError {
     FileAlreadyExists(PathBuf),
     /// Any kind of IO error that happens when 
     /// writing in the underlying IO device.
-    IOError(io::Error),
-}
-
-impl From<io::Error> for OpenWriteError {
-    fn from(err: io::Error) -> OpenWriteError {
-        OpenWriteError::IOError(err)
-    }
+    IOError(PathBuf, io::Error),
 }
 
 /// Error that may occur when accessing a file read
@@ -34,7 +28,7 @@ pub enum OpenReadError {
     FileDoesNotExist(PathBuf),
     /// Any kind of IO error that happens when 
     /// interacting with the underlying IO device.
-    IOError(io::Error),
+    IOError(PathBuf, io::Error),
 }
 
 
@@ -45,7 +39,7 @@ pub enum DeleteError {
     FileDoesNotExist(PathBuf),
     /// Any kind of IO error that happens when 
     /// interacting with the underlying IO device.
-    IOError(io::Error),
+    IOError(PathBuf, io::Error),
     /// The file may not be deleted because it is 
     /// protected.
     FileProtected(PathBuf),

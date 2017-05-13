@@ -14,9 +14,6 @@ use fastfield::FastFieldNotAvailableError;
 use serde_json;
 
 error_chain!(
-    foreign_links {
-        IOError(io::Error);
-    }
     errors {
         PathDoesNotExist(buf: PathBuf) {
             description("path does not exist")
@@ -26,12 +23,16 @@ error_chain!(
             description("file already exists")
             display("file already exists: '{:?}'", buf)
         }
-        Poisoned {
-            description("a thread holding the locked panicked and poisoned the lock")
+        IOError(buf: Option<PathBuf>, err: io::Error) {
+            description("an IO error occurred")
+            display("an IO error occurred: '{:?}' because: '{}'", buf, err)
         }
         CorruptedFile(buf: PathBuf, err: Box<error::Error + Send + Sync>) {
             description("file contains corrupted data")
             display("file contains corrupted data: '{:?}' because: '{}'", buf, err)
+        }
+        Poisoned {
+            description("a thread holding the locked panicked and poisoned the lock")
         }
         InvalidArgument(arg: String) {
             description("an invalid argument was passed")
@@ -52,6 +53,12 @@ error_chain!(
     }
 );
 
+impl From<io::Error> for Error {
+    fn from(io_error: io::Error) -> Error {
+        ErrorKind::IOError(None, io_error).into()
+    }
+}
+
 impl From<query::QueryParserError> for Error {
     fn from(parsing_error: query::QueryParserError) -> Error {
         ErrorKind::InvalidArgument(format!("Query is invalid. {:?}", parsing_error)).into()
@@ -67,8 +74,10 @@ impl<Guard> From<PoisonError<Guard>> for Error {
 impl From<OpenReadError> for Error {
     fn from(error: OpenReadError) -> Error {
         match error {
-            OpenReadError::FileDoesNotExist(filepath) => ErrorKind::PathDoesNotExist(filepath).into(),
-            OpenReadError::IOError(io_error) => ErrorKind::IOError(io_error).into(),
+            OpenReadError::FileDoesNotExist(filepath) => 
+                ErrorKind::PathDoesNotExist(filepath).into(),
+            OpenReadError::IOError(filpath, io_error) => 
+                ErrorKind::IOError(filpath, io_error).into(),
         }
     }
 }
@@ -84,8 +93,8 @@ impl From<OpenWriteError> for Error {
         match error {
             OpenWriteError::FileAlreadyExists(filepath) => 
                 ErrorKind::FileAlreadyExists(filepath).into(),
-            OpenWriteError::IOError(io_error) => 
-                ErrorKind::IOError(io_error).into(),
+            OpenWriteError::IOError(filpath, io_error) => 
+                ErrorKind::IOError(filpath, io_error).into(),
         }
     }
 }
@@ -103,6 +112,6 @@ impl From<OpenDirectoryError> for Error {
 
 impl From<serde_json::Error> for Error {
     fn from(error: serde_json::Error) -> Error {
-        ErrorKind::IOError(error.into()).into()
+        ErrorKind::IOError(None, error.into()).into()
     }
 }
