@@ -6,7 +6,7 @@ use std::result;
 use std::sync::{Arc, RwLock};
 use common::make_io_err;
 use directory::{Directory, ReadOnlySource};
-use directory::error::{OpenWriteError, OpenReadError, DeleteError};
+use directory::error::{IOError, OpenWriteError, OpenReadError, DeleteError};
 use directory::WritePtr;
 use super::shared_vec_slice::SharedVecSlice;
 
@@ -92,7 +92,7 @@ impl InnerDirectory {
             .read()
             .map_err(|_| {
                 let io_err = make_io_err(format!("Failed to acquire read lock for the directory, when trying to read {:?}", path));
-                OpenReadError::IOError(io_err)
+                IOError::with_path(path.to_owned(), io_err).into()
             })
             .and_then(|readable_map| {
                 readable_map
@@ -109,7 +109,7 @@ impl InnerDirectory {
             .write()
             .map_err(|_| {
                 let io_err = make_io_err(format!("Failed to acquire write lock for the directory, when trying to delete {:?}", path));
-                DeleteError::IOError(io_err)
+                IOError::with_path(path.to_owned(), io_err).into()
             })
             .and_then(|mut writable_map| {
                 match writable_map.remove(path) {
@@ -168,7 +168,7 @@ impl Directory for RAMDirectory {
         let path_buf = PathBuf::from(path);
         let vec_writer = VecWriter::new(path_buf.clone(), self.fs.clone());
         // force the creation of the file to mimic the MMap directory.
-        if try!(self.fs.write(path_buf.clone(), &Vec::new())) {
+        if self.fs.write(path_buf.clone(), &Vec::new()).map_err(|e| IOError::with_path(path.to_owned(), e))? {
             Err(OpenWriteError::FileAlreadyExists(path_buf))
         }
         else {

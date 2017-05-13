@@ -1,7 +1,7 @@
 use atomicwrites;
 use common::make_io_err;
 use directory::Directory;
-use directory::error::{OpenWriteError, OpenReadError, DeleteError, OpenDirectoryError};
+use directory::error::{IOError, OpenWriteError, OpenReadError, DeleteError, OpenDirectoryError};
 use directory::ReadOnlySource;
 use directory::shared_vec_slice::SharedVecSlice;
 use directory::WritePtr;
@@ -29,13 +29,13 @@ fn open_mmap(full_path: &PathBuf) -> result::Result<Option<Arc<Mmap>>, OpenReadE
             OpenReadError::FileDoesNotExist(full_path.clone())
         }
         else {
-            OpenReadError::IOError(err)
+            IOError::with_path(full_path.to_owned(), err).into()
         }
     };
     let file = File::open(&full_path).map_err(convert_file_error)?;
     let meta_data = file
         .metadata()
-        .map_err(|e| OpenReadError::IOError(e))?;
+        .map_err(|e| IOError::with_path(full_path.to_owned(), e))?;
     if meta_data.len() == 0 {
         // if the file size is 0, it will not be possible 
         // to mmap the file, so we return an anonymous mmap_cache
@@ -47,7 +47,7 @@ fn open_mmap(full_path: &PathBuf) -> result::Result<Option<Arc<Mmap>>, OpenReadE
             Ok(Some(Arc::new(mmap)))
         }
         Err(e) => {
-            Err(OpenReadError::IOError(e))
+            Err(IOError::with_path(full_path.to_owned(), e))?
         }
     }
     
@@ -292,9 +292,10 @@ impl Directory for MmapDirectory {
         
         let mut mmap_cache = self.mmap_cache
             .write()
-            .map_err(|_| OpenReadError::IOError(
-                make_io_err(format!("Failed to acquired write lock on mmap cache while reading {:?}", path))
-            ))?;
+            .map_err(|_| {
+                let io_err = make_io_err(format!("Failed to acquired write lock on mmap cache while reading {:?}", path));
+                IOError::with_path(path.to_owned(), io_err)
+            })?;
         
         Ok(mmap_cache.get_mmap(full_path)?
             .map(MmapReadOnly::from)
@@ -312,23 +313,21 @@ impl Directory for MmapDirectory {
             .create_new(true)
             .open(full_path);
         
-        let mut file = try!(
-            open_res.map_err(|err| {
-                if err.kind() == io::ErrorKind::AlreadyExists {
-                    OpenWriteError::FileAlreadyExists(PathBuf::from(path))
-                }
-                else {
-                    OpenWriteError::IOError(err)
-                }
-            })
-        );
+        let mut file = open_res.map_err(|err| {
+            if err.kind() == io::ErrorKind::AlreadyExists {
+                OpenWriteError::FileAlreadyExists(path.to_owned())
+            }
+            else {
+                OpenWriteError::IOError(IOError::with_path(path.to_owned(), err))
+            }
+        })?;
         
         // making sure the file is created.
-        try!(file.flush());
+        file.flush().map_err(|e| IOError::with_path(path.to_owned(), e))?;
         
         // Apparetntly, on some filesystem syncing the parent
         // directory is required.
-        try!(self.sync_directory());
+        self.sync_directory().map_err(|e| IOError::with_path(path.to_owned(), e))?;
         
         let writer = SafeFileWriter::new(file);
         Ok(BufWriter::new(Box::new(writer)))
@@ -337,11 +336,12 @@ impl Directory for MmapDirectory {
     fn delete(&self, path: &Path) -> result::Result<(), DeleteError> {
         debug!("Deleting file {:?}", path);
         let full_path = self.resolve_path(path);
-        let mut mmap_cache = try!(self.mmap_cache
+        let mut mmap_cache = self.mmap_cache
             .write()
-            .map_err(|_| 
-                 DeleteError::IOError(make_io_err(format!("Failed to acquired write lock on mmap cache while deleting {:?}", path))))
-        );
+            .map_err(|_| {
+                let io_err = make_io_err(format!("Failed to acquired write lock on mmap cache while deleting {:?}", path));
+                IOError::with_path(path.to_owned(), io_err)
+            })?;
         // Removing the entry in the MMap cache.
         // The munmap will appear on Drop,
         // when the last reference is gone.
@@ -349,14 +349,17 @@ impl Directory for MmapDirectory {
         match fs::remove_file(&full_path) {
             Ok(_) => {
                 self.sync_directory()
-                    .map_err(|e| DeleteError::IOError(e))
+                    .map_err(|e| {
+                        let io_err = IOError::with_path(path.to_owned(), e);
+                        DeleteError::IOError(io_err)
+                    })
             }
             Err(e) => {
                 if e.kind() == io::ErrorKind::NotFound {
                     Err(DeleteError::FileDoesNotExist(path.to_owned()))
                 }
                 else {
-                    Err(DeleteError::IOError(e))
+                    Err(IOError::with_path(path.to_owned(), e))?
                 }
             }
         }
@@ -373,7 +376,7 @@ impl Directory for MmapDirectory {
         match File::open(&full_path) {
             Ok(mut file) => {
                 file.read_to_end(&mut buffer)
-                    .map_err(|e| OpenReadError::IOError(e))?;
+                    .map_err(|e| IOError::with_path(path.to_owned(), e))?;
                 Ok(buffer)
             }
             Err(e) => {
@@ -381,7 +384,7 @@ impl Directory for MmapDirectory {
                     Err(OpenReadError::FileDoesNotExist(path.to_owned()))
                 }
                 else {
-                    Err(OpenReadError::IOError(e))
+                    Err(IOError::with_path(path.to_owned(), e))?
                 }
             }
         }

@@ -1,6 +1,31 @@
 use std::path::PathBuf;
 use std::io;
 
+/// General IO error with an optional path to offending file.
+#[derive(Debug)]
+pub struct IOError {
+    buf: Option<PathBuf>,
+    err: io::Error,
+}
+
+impl IOError {
+    pub(crate) fn with_path(buf: PathBuf, err: io::Error) -> Self {
+        IOError {
+            buf: Some(buf),
+            err: err
+        }
+    }
+}
+
+impl From<io::Error> for IOError {
+    fn from(err: io::Error) -> IOError {
+        IOError {
+            buf: None,
+            err: err
+        }
+    }
+}
+
 /// Error that may occur when opening a directory
 #[derive(Debug)]
 pub enum OpenDirectoryError {
@@ -18,7 +43,13 @@ pub enum OpenWriteError {
     FileAlreadyExists(PathBuf),
     /// Any kind of IO error that happens when 
     /// writing in the underlying IO device.
-    IOError(PathBuf, io::Error),
+    IOError(IOError),
+}
+
+impl From<IOError> for OpenWriteError {
+    fn from(err: IOError) -> OpenWriteError {
+        OpenWriteError::IOError(err)
+    }
 }
 
 /// Error that may occur when accessing a file read
@@ -28,9 +59,14 @@ pub enum OpenReadError {
     FileDoesNotExist(PathBuf),
     /// Any kind of IO error that happens when 
     /// interacting with the underlying IO device.
-    IOError(PathBuf, io::Error),
+    IOError(IOError),
 }
 
+impl From<IOError> for OpenReadError {
+    fn from(err: IOError) -> OpenReadError {
+        OpenReadError::IOError(err)
+    }
+}
 
 /// Error that may occur when trying to delete a file
 #[derive(Debug)]
@@ -39,8 +75,14 @@ pub enum DeleteError {
     FileDoesNotExist(PathBuf),
     /// Any kind of IO error that happens when 
     /// interacting with the underlying IO device.
-    IOError(PathBuf, io::Error),
+    IOError(IOError),
     /// The file may not be deleted because it is 
     /// protected.
     FileProtected(PathBuf),
+}
+
+impl From<IOError> for DeleteError {
+    fn from(err: IOError) -> DeleteError {
+        DeleteError::IOError(err)
+    }
 }

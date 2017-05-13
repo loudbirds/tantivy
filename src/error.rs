@@ -7,7 +7,7 @@ use std::io;
 use std::path::PathBuf;
 use std::error;
 use std::sync::PoisonError;
-use directory::error::{OpenReadError, OpenWriteError, OpenDirectoryError};
+use directory::error::{IOError, OpenReadError, OpenWriteError, OpenDirectoryError};
 use query;
 use schema;
 use fastfield::FastFieldNotAvailableError;
@@ -23,9 +23,9 @@ error_chain!(
             description("file already exists")
             display("file already exists: '{:?}'", buf)
         }
-        IOError(buf: Option<PathBuf>, err: io::Error) {
+        IOError(err: IOError) {
             description("an IO error occurred")
-            display("an IO error occurred: '{:?}' because: '{}'", buf, err)
+            display("an IO error occurred: '{:?}'", err)
         }
         CorruptedFile(buf: PathBuf, err: Box<error::Error + Send + Sync>) {
             description("file contains corrupted data")
@@ -55,7 +55,7 @@ error_chain!(
 
 impl From<io::Error> for Error {
     fn from(io_error: io::Error) -> Error {
-        ErrorKind::IOError(None, io_error).into()
+        ErrorKind::IOError(io_error.into()).into()
     }
 }
 
@@ -76,8 +76,8 @@ impl From<OpenReadError> for Error {
         match error {
             OpenReadError::FileDoesNotExist(filepath) => 
                 ErrorKind::PathDoesNotExist(filepath).into(),
-            OpenReadError::IOError(filpath, io_error) => 
-                ErrorKind::IOError(filpath, io_error).into(),
+            OpenReadError::IOError(io_error) => 
+                ErrorKind::IOError(io_error).into(),
         }
     }
 }
@@ -93,8 +93,8 @@ impl From<OpenWriteError> for Error {
         match error {
             OpenWriteError::FileAlreadyExists(filepath) => 
                 ErrorKind::FileAlreadyExists(filepath).into(),
-            OpenWriteError::IOError(filpath, io_error) => 
-                ErrorKind::IOError(filpath, io_error).into(),
+            OpenWriteError::IOError(io_error) => 
+                ErrorKind::IOError(io_error).into(),
         }
     }
 }
@@ -112,6 +112,7 @@ impl From<OpenDirectoryError> for Error {
 
 impl From<serde_json::Error> for Error {
     fn from(error: serde_json::Error) -> Error {
-        ErrorKind::IOError(None, error.into()).into()
+        let io_err = io::Error::from(error);
+        ErrorKind::IOError(io_err.into()).into()
     }
 }

@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use serde_json;
-use directory::error::{OpenReadError, DeleteError, OpenWriteError};
+use directory::error::{IOError, OpenReadError, DeleteError, OpenWriteError};
 use directory::{ReadOnlySource, WritePtr};
 use std::result;
 use std::io;
@@ -91,7 +91,7 @@ impl ManagedDirectory {
                     meta_informations: Arc::default(),
                 })
             }
-            Err(OpenReadError::IOError(e)) => {
+            Err(e) => {
                 Err(From::from(e))
             }
         }
@@ -238,7 +238,7 @@ impl Directory for ManagedDirectory {
     }
 
     fn open_write(&mut self, path: &Path) -> result::Result<WritePtr, OpenWriteError> {
-        self.register_file_as_managed(path)?;
+        self.register_file_as_managed(path).map_err(|e| IOError::with_path(path.to_owned(), e))?;
         self.directory.open_write(path)
     }
 
