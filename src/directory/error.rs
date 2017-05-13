@@ -1,17 +1,27 @@
 use std::path::PathBuf;
 use std::io;
+use std::fmt;
 
-/// General IO error with an optional path to offending file.
+/// General IO error with an optional path to the offending file.
 #[derive(Debug)]
 pub struct IOError {
-    buf: Option<PathBuf>,
+    path: Option<PathBuf>,
     err: io::Error,
 }
 
+impl fmt::Display for IOError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.path {
+            Some(ref path) => write!(f, "io error occurred on path '{:?}': '{}'", path, self.err),
+            None => write!(f, "io error occurred: '{}'", self.err)
+        }
+    }
+}
+
 impl IOError {
-    pub(crate) fn with_path(buf: PathBuf, err: io::Error) -> Self {
+    pub(crate) fn with_path(path: PathBuf, err: io::Error) -> Self {
         IOError {
-            buf: Some(buf),
+            path: Some(path),
             err: err
         }
     }
@@ -20,7 +30,7 @@ impl IOError {
 impl From<io::Error> for IOError {
     fn from(err: io::Error) -> IOError {
         IOError {
-            buf: None,
+            path: None,
             err: err
         }
     }

@@ -25,7 +25,7 @@ error_chain!(
         }
         IOError(err: IOError) {
             description("an IO error occurred")
-            display("an IO error occurred: '{:?}'", err)
+            display("an IO error occurred: '{}'", err)
         }
         CorruptedFile(buf: PathBuf, err: Box<error::Error + Send + Sync>) {
             description("file contains corrupted data")
