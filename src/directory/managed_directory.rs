@@ -12,7 +12,7 @@ use core::MANAGED_FILEPATH;
 use std::collections::HashMap;
 use std::fmt;
 use Result;
-use Error;
+use error::ErrorKind;
 
 /// Wrapper of directories that keeps track of files created by Tantivy.
 ///
@@ -75,7 +75,7 @@ impl ManagedDirectory {
             Ok(data) => {
                 let managed_files_json = String::from_utf8_lossy(&data);
                 let managed_files: HashSet<PathBuf> = serde_json::from_str(&managed_files_json)
-                    .map_err(|e| Error::CorruptedFile(MANAGED_FILEPATH.clone(), Box::new(e)))?;
+                    .map_err(|e| ErrorKind::CorruptedFile(MANAGED_FILEPATH.clone(), Box::new(e).into()))?;
                 Ok(ManagedDirectory {
                     directory: box directory,
                     meta_informations: Arc::new(RwLock::new(

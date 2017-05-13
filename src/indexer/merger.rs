@@ -1,4 +1,4 @@
-use {Error, Result};
+use error::{ErrorKind, Result};
 use core::SegmentReader;
 use core::Segment;
 use DocId;
@@ -147,7 +147,7 @@ impl IndexMerger {
                     None => {
                         let error_msg = format!("Failed to find a u64_reader for field {:?}", field);
                         error!("{}", error_msg);
-                        return Err(Error::SchemaError(error_msg))
+                        bail!(ErrorKind::SchemaError(error_msg));
                     }
                 }
                 

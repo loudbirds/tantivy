@@ -9,7 +9,7 @@ use core::SegmentReader;
 use indexer::stamper::Stamper;
 use datastruct::stacker::Heap;
 use directory::FileProtection;
-use Error;
+use error::ErrorKind;
 use Directory;
 use fastfield::write_delete_bitset;
 use indexer::delete_queue::{DeleteCursor, DeleteQueue};
@@ -322,18 +322,17 @@ impl IndexWriter {
         
         let former_workers_handles = mem::replace(&mut self.workers_join_handle, vec!());
         for join_handle in former_workers_handles {
-            try!(join_handle.join()
-                .expect("Indexing Worker thread panicked")
-                .map_err(|e| {
-                    Error::ErrorInThread(format!("Error in indexing worker thread. {:?}", e))
-                }));
+            match join_handle.join().expect("Indexing Worker thread panicked") {
+                Ok(_) => (),
+                Err(e) => bail!(ErrorKind::ErrorInThread(format!("Error in indexing worker thread. {:?}", e)))
+            }
         }
         drop(self.workers_join_handle);
 
         let result = self.segment_updater
             .wait_merging_thread()
             .map_err(|_| 
-                Error::ErrorInThread("Failed to join merging thread.".to_string())
+                ErrorKind::ErrorInThread("Failed to join merging thread.".to_string()).into()
             );
         
         if let &Err(ref e) = &result {
@@ -514,7 +513,7 @@ impl IndexWriter {
         
         for worker_handle in former_workers_join_handle {
             let indexing_worker_result = try!(worker_handle.join()
-                .map_err(|e| Error::ErrorInThread(format!("{:?}", e))));
+                .map_err(|e| ErrorKind::ErrorInThread(format!("{:?}", e).into())));
             try!(indexing_worker_result);
             // add a new worker for the next generation.
             try!(self.add_indexing_worker());

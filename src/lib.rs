@@ -54,6 +54,8 @@ extern crate crossbeam;
 extern crate bit_set;
 extern crate futures;
 extern crate futures_cpupool;
+#[macro_use]
+extern crate error_chain;
 
 #[cfg(test)]
 extern crate env_logger;
